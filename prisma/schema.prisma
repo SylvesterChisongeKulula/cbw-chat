@@ -1,0 +1,58 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          Int       @id @default(autoincrement())
+  username    String    @unique
+  displayName String?   @map("display_name")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  sentMessages     Message[] @relation("SentMessages")
+  chatsAsUser1     Chat[]    @relation("ChatsAsUser1")
+  chatsAsUser2     Chat[]    @relation("ChatsAsUser2")
+
+  @@map("users")
+}
+
+model Chat {
+  id        Int       @id @default(autoincrement())
+  user1Id   Int       @map("user1_id")
+  user2Id   Int       @map("user2_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  user1     User      @relation("ChatsAsUser1", fields: [user1Id], references: [id])
+  user2     User      @relation("ChatsAsUser2", fields: [user2Id], references: [id])
+  messages  Message[]
+
+  @@unique([user1Id, user2Id])
+  @@map("chats")
+}
+
+model Message {
+  id        Int       @id @default(autoincrement())
+  chatId    Int       @map("chat_id")
+  senderId  Int       @map("sender_id")
+  content   String
+  isRead    Boolean   @default(false) @map("is_read")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  chat      Chat      @relation(fields: [chatId], references: [id])
+  sender    User      @relation("SentMessages", fields: [senderId], references: [id])
+
+  @@map("messages")
+}
