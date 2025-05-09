@@ -12,7 +12,7 @@ function socketHandler(io, prisma) {
       try {
         // Associate socket with userId
         onlineUsers.set(socket.id, userId);
-        socket.join(`user:${userId}`);
+        socket.join(`user:${userId}`);  
         
         logger.info(`User ${userId} joined with socket ${socket.id}`);
         
@@ -75,8 +75,13 @@ function socketHandler(io, prisma) {
         });
 
         // Get chat to find recipient
+        // Make sure chatId is a number
+        const chatIdNum = typeof chatId === 'string' ? parseInt(chatId, 10) : chatId;
+        
         const chat = await prisma.chat.findUnique({
-          where: { id: parseInt(chatId) },
+          where: {
+            id: chatIdNum
+          },
           select: { user1Id: true, user2Id: true }
         });
         
@@ -94,6 +99,12 @@ function socketHandler(io, prisma) {
         io.to(`user:${recipientId}`).emit('message:new', message);
         socket.emit('message:sent', message);
         
+        // Also broadcast to a chat-specific room to ensure all connected clients receive updates
+        io.to(`chat:${chatIdNum}`).emit('chat:updated', {
+          chatId: chatIdNum,
+          lastMessage: message
+        });
+        
       } catch (error) {
         logger.error('Error in message:send handler:', error);
         socket.emit('error', { message: 'Failed to send message' });
@@ -101,13 +112,32 @@ function socketHandler(io, prisma) {
     });
 
     // Handle typing indicator
-    socket.on('typing:start', async (chatId) => {
+    socket.on('typing:start', async (data) => {
       try {
         const userId = onlineUsers.get(socket.id);
         if (!userId) return;
         
+        // Extract chatId from the data parameter
+        let chatIdNum;
+        
+        if (typeof data === 'object' && data !== null) {
+          // If data is an object, extract the chatId property
+          chatIdNum = typeof data.chatId === 'string' ? parseInt(data.chatId, 10) : data.chatId;
+        } else {
+          // If data is not an object, treat it as the chatId directly
+          chatIdNum = typeof data === 'string' ? parseInt(data, 10) : data;
+        }
+        
+        // Ensure we have a valid chatId
+        if (!chatIdNum) {
+          logger.error('Invalid chatId in typing:start event', { data });
+          return;
+        }
+        
         const chat = await prisma.chat.findUnique({
-          where: { id: parseInt(chatId) },
+          where: {
+            id: chatIdNum
+          },
           select: { user1Id: true, user2Id: true }
         });
         
@@ -118,7 +148,7 @@ function socketHandler(io, prisma) {
           : chat.user1Id;
         
         io.to(`user:${recipientId}`).emit('typing:start', { 
-          chatId: parseInt(chatId), 
+          chatId: chatIdNum, 
           userId: parseInt(userId) 
         });
       } catch (error) {
@@ -126,13 +156,32 @@ function socketHandler(io, prisma) {
       }
     });
     
-    socket.on('typing:stop', async (chatId) => {
+    socket.on('typing:stop', async (data) => {
       try {
         const userId = onlineUsers.get(socket.id);
         if (!userId) return;
         
+        // Extract chatId from the data parameter
+        let chatIdNum;
+        
+        if (typeof data === 'object' && data !== null) {
+          // If data is an object, extract the chatId property
+          chatIdNum = typeof data.chatId === 'string' ? parseInt(data.chatId, 10) : data.chatId;
+        } else {
+          // If data is not an object, treat it as the chatId directly
+          chatIdNum = typeof data === 'string' ? parseInt(data, 10) : data;
+        }
+        
+        // Ensure we have a valid chatId
+        if (!chatIdNum) {
+          logger.error('Invalid chatId in typing:stop event', { data });
+          return;
+        }
+        
         const chat = await prisma.chat.findUnique({
-          where: { id: parseInt(chatId) },
+          where: {
+            id: chatIdNum
+          },
           select: { user1Id: true, user2Id: true }
         });
         
@@ -143,7 +192,7 @@ function socketHandler(io, prisma) {
           : chat.user1Id;
         
         io.to(`user:${recipientId}`).emit('typing:stop', { 
-          chatId: parseInt(chatId), 
+          chatId: chatIdNum, 
           userId: parseInt(userId) 
         });
       } catch (error) {
